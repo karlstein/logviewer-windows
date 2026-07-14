@@ -530,11 +530,14 @@ function setStatus(msg, type) {
 }
 
 function updateCount() {
-  const filter = filterInput.value.toLowerCase();
   const totalLines = entries.reduce((sum, e) => sum + e.lines.length, 0);
-  if (totalLines === 0) { statusCount.textContent = ""; return; }
+  if (totalLines === 0) { statusCount.textContent = ''; return; }
+  const filter = filterInput.value.toLowerCase();
+  if (filter) {
+    let match = 0;
     for (const e of entries) for (const line of e.lines) if (line.toLowerCase().includes(filter)) match++;
     statusCount.textContent = `${match} / ${totalLines} lines`;
+  } else {
     statusCount.textContent = `${totalLines} lines`;
   }
 }
@@ -633,6 +636,7 @@ saveBtn.addEventListener('click', async () => {
 });
 
 
+deleteBtn.addEventListener('click', async () => {
   if (editingIdx < 0) return;
   if (!confirm(`Delete profile "${profiles[editingIdx].name}"?`)) return;
   try {
@@ -755,6 +759,7 @@ async function stopCmd() {
 }
 
 
+function onCmdEnded(msg) {
   isRunning = false;
   runBtn.disabled = false;
   stopBtn.disabled = true;
