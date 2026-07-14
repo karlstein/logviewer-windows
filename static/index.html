@@ -722,6 +722,141 @@ function onCmdEnded(msg) {
   }, 5000);
 }
 
+// --- ANSI color parsing ---
+
+// ANSI color codes mapped to dark-theme CSS colors
+const ANSI_COLORS = {
+  // Normal
+  30: '#808080', 31: '#f44747', 32: '#6a9955', 33: '#d7ba7d',
+  34: '#569cd6', 35: '#c586c0', 36: '#4ec9b0', 37: '#cccccc',
+  // Bright
+  90: '#a0a0a0', 91: '#f08080', 92: '#89d185', 93: '#e2c08d',
+  94: '#7ec8e3', 95: '#d4a0d0', 96: '#6cd4c0', 97: '#e0e0e0',
+};
+
+const ANSI_BG = {
+  40: '#808080', 41: '#f44747', 42: '#6a9955', 43: '#d7ba7d',
+  44: '#569cd6', 45: '#c586c0', 46: '#4ec9b0', 47: '#cccccc',
+  100: '#a0a0a0', 101: '#f08080', 102: '#89d185', 103: '#e2c08d',
+  104: '#7ec8e3', 105: '#d4a0d0', 106: '#6cd4c0', 107: '#e0e0e0',
+};
+
+function ansiToHtml(text) {
+  if (!text || !text.includes('\x1b[')) return escapeHtml(text);
+
+  let html = '';
+  let i = 0;
+  let fg = null, bg = null, bold = false, italic = false, underline = false;
+  const stack = [];
+
+  function applyStyle() {
+    let styles = '';
+    if (bold) styles += 'font-weight:bold;';
+    if (italic) styles += 'font-style:italic;';
+    if (underline) styles += 'text-decoration:underline;';
+    if (fg) styles += `color:${fg};`;
+    if (bg) styles += `background-color:${bg};`;
+    return styles;
+  }
+
+  function flush() {
+    if (stack.length === 0) return '';
+    return '</span>'.repeat(stack.length);
+  }
+
+  function openSpan(styles) {
+    stack.push(styles);
+    return `<span style="${styles}">`;
+  }
+
+  while (i < text.length) {
+    if (text[i] === '\x1b' && text[i + 1] === '[') {
+      const end = text.indexOf('m', i + 2);
+      if (end === -1) { html += escapeHtml(text.slice(i)); break; }
+      const codes = text.slice(i + 2, end).split(';');
+      i = end + 1;
+
+      // Parse SGR codes
+      let j = 0;
+      while (j < codes.length) {
+        const code = codes[j];
+        if (code === '' || code === '0') {
+          // Reset
+          html += flush();
+          fg = null; bg = null; bold = false; italic = false; underline = false;
+          j++;
+        } else if (code === '1') { bold = true; j++; }
+        else if (code === '3') { italic = true; j++; }
+        else if (code === '4') { underline = true; j++; }
+        else if (code === '7') { /* inverse - swap fg/bg */ j++; }
+        else if (code === '22') { bold = false; j++; }
+        else if (code === '23') { italic = false; j++; }
+        else if (code === '24') { underline = false; j++; }
+        else if (code === '27') { /* reset inverse */ j++; }
+        else if (code >= '30' && code <= '37') { fg = ANSI_COLORS[parseInt(code)]; j++; }
+        else if (code >= '90' && code <= '97') { fg = ANSI_COLORS[parseInt(code)]; j++; }
+        else if (code >= '40' && code <= '47') { bg = ANSI_BG[parseInt(code)]; j++; }
+        else if (code >= '100' && code <= '107') { bg = ANSI_BG[parseInt(code)]; j++; }
+        else if (code === '39') { fg = null; j++; }
+        else if (code === '49') { bg = null; j++; }
+        else if (code === '38' || code === '48') {
+          // Extended colors
+          const isFg = code === '38';
+          const type = codes[++j];
+          if (type === '5' && codes[j + 1]) {
+            // 256-color
+            const c256 = parseInt(codes[++j]);
+            if (isFg) fg = color256(c256); else bg = color256(c256);
+            j++;
+          } else if (type === '2' && codes[j + 1] && codes[j + 2] && codes[j + 3]) {
+            // Truecolor
+            const r = parseInt(codes[++j]), g = parseInt(codes[++j]), b = parseInt(codes[++j]);
+            if (isFg) fg = `rgb(${r},${g},${b})`; else bg = `rgb(${r},${g},${b})`;
+            j++;
+          } else {
+            j++; // skip unknown
+          }
+        }
+        // Ignore unknown codes (just skip them)
+        else { j++; }
+      }
+
+      html += openSpan(applyStyle());
+
+    } else {
+      // Regular character - collect until next escape
+      let start = i;
+      while (i < text.length && !(text[i] === '\x1b' && text[i + 1] === '[')) i++;
+      html += escapeHtml(text.slice(start, i));
+    }
+  }
+
+  html += flush();
+  return html;
+}
+
+// Convert 256-color index to hex color
+function color256(n) {
+  if (n < 16) {
+    // Standard + bright colors
+    const std = [0,0x80,0x80,0x80,0x80,0x80,0x80,0xc0,
+                 0x80,0xff,0xff,0xff,0xff,0xff,0xff,0xff];
+    // Actually, just use the standard 16 ANSI colors
+    const c16 = ['#000','#800','#080','#880','#008','#808','#088','#c0c0c0',
+                 '#808080','#f00','#0f0','#ff0','#00f','#f0f','#0ff','#fff'];
+    return c16[n];
+  }
+  if (n < 232) {
+    n -= 16;
+    const r = (n / 36 | 0) * 40 + 55;
+    const g = ((n / 6) % 6 | 0) * 40 + 55;
+    const b = (n % 6) * 40 + 55;
+    return `rgb(${r},${g},${b})`;
+  }
+  const gray = (n - 232) * 10 + 8;
+  return `rgb(${gray},${gray},${gray})`;
+}
+
 // --- Log display ---
 function appendLogLine(line) {
   // Clear empty state if first line
@@ -731,7 +866,7 @@ function appendLogLine(line) {
 
   const div = document.createElement('div');
   div.className = 'log-line';
-  div.textContent = line;
+  div.innerHTML = ansiToHtml(line);
 
   // Check filter
   const filter = filterInput.value;
@@ -757,23 +892,23 @@ function appendLogLine(line) {
 
 function applyFilter() {
   const filter = filterInput.value.toLowerCase();
-  const lines = logArea.querySelectorAll('.log-line');
+  const elements = logArea.querySelectorAll('.log-line');
   let matchCount = 0;
 
-  lines.forEach((line, i) => {
+  elements.forEach((el, i) => {
     if (!filter) {
-      line.style.display = '';
-      line.classList.remove('highlight');
+      el.style.display = '';
+      el.classList.remove('highlight');
       matchCount++;
     } else {
       const text = logLines[i] || '';
       if (text.toLowerCase().includes(filter)) {
-        line.style.display = '';
-        line.classList.add('highlight');
+        el.style.display = '';
+        el.classList.add('highlight');
         matchCount++;
       } else {
-        line.style.display = 'none';
-        line.classList.remove('highlight');
+        el.style.display = 'none';
+        el.classList.remove('highlight');
       }
     }
   });
