@@ -628,7 +628,7 @@ saveBtn.addEventListener('click', async () => {
   }
 });
 
-deleteBtn.addEventListener('click', async () => {
+
   if (editingIdx < 0) return;
   if (!confirm(`Delete profile "${profiles[editingIdx].name}"?`)) return;
   try {
@@ -643,7 +643,7 @@ deleteBtn.addEventListener('click', async () => {
   }
 });
 
-// Close modal on overlay click
+
 profileModal.addEventListener('click', (e) => {
   if (e.target === profileModal) closeModal();
 });
@@ -661,7 +661,7 @@ async function loadProfiles() {
   }
 }
 
-// --- Run / Stop ---
+
 async function runCmd() {
   const cmd = cmdInput.value.trim();
   if (!cmd) { showToast('Enter a command first', 'error'); return; }
@@ -726,6 +726,7 @@ async function runCmd() {
     eventSource.onerror = () => {
       // Connection closed (either by server or error)
       if (eventSource.readyState === EventSource.CLOSED && isRunning) {
+        finalizeEntry();
         onCmdEnded('Command completed');
       }
     };
@@ -734,6 +735,13 @@ async function runCmd() {
   }
 }
 
+
+function finalizeEntry() {
+  if (currentEntry) {
+    entries.push(currentEntry);
+    currentEntry = null;
+  }
+}
 async function stopCmd() {
   try {
     await api('POST', '/api/stop');
@@ -742,7 +750,7 @@ async function stopCmd() {
   }
 }
 
-function onCmdEnded(msg) {
+
   isRunning = false;
   runBtn.disabled = false;
   stopBtn.disabled = true;
@@ -995,6 +1003,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (st.running !== undefined) {
       if (!st.running && isRunning) {
         onCmdEnded(st.message || 'Command completed');
+        finalizeEntry();
       }
       isRunning = st.running || false;
       runBtn.disabled = isRunning;
