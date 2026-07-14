@@ -464,10 +464,9 @@ body {
 let profiles = [];
 let selectedIdx = -1;
 let editingIdx = -1;
-let logLines = [];
-let logCount = 0;
-let entries = [];       // logical entries: { text: "full entry text", dom: null }
+let entries = [];        // each entry: { text: "full text\nwith\nnewlines", lines: ["line1","line2",...], dom: null }
 let currentEntry = null; // entry currently being built
+let globalLineIdx = 0;   // global line counter for row striping
 let isRunning = false;
 let eventSource = null;
 let autoScroll = true;
@@ -528,13 +527,11 @@ function setStatus(msg, type) {
 
 function updateCount() {
   const filter = filterInput.value.toLowerCase();
-  if (logCount === 0) { statusCount.textContent = ''; return; }
-  if (filter) {
-    let match = 0;
-    for (const line of logLines) { if (line.toLowerCase().includes(filter)) match++; }
-    statusCount.textContent = `${match} / ${logCount} lines`;
-  } else {
-    statusCount.textContent = `${logCount} lines`;
+  const totalLines = entries.reduce((sum, e) => sum + e.lines.length, 0);
+  if (totalLines === 0) { statusCount.textContent = ""; return; }
+    for (const e of entries) for (const line of e.lines) if (line.toLowerCase().includes(filter)) match++;
+    statusCount.textContent = `${match} / ${totalLines} lines`;
+    statusCount.textContent = `${totalLines} lines`;
   }
 }
 
@@ -678,10 +675,9 @@ async function runCmd() {
     stopBtn.disabled = false;
     addBtn.disabled = true;
     setStatus(`Running on ${profiles[selectedIdx].name}...`, 'running');
-    logLines = [];
-    logCount = 0;
     entries = [];
     currentEntry = null;
+    globalLineIdx = 0;
     logArea.innerHTML = '';
     filterInput.value = '';
     filterCount.textContent = '';
@@ -692,15 +688,16 @@ async function runCmd() {
     eventSource = new EventSource('/api/stream');
     eventSource.onmessage = (e) => {
       const line = e.data;
-      const idx = logLines.length;
-      logLines.push(line);
-      logCount++;
-
+      const lineIdx = globalLineIdx++;
+      
       // Trim oldest entries when buffer gets large
-      if (logLines.length > 5000) {
+      if (globalLineIdx > 10000) {
         entries.splice(0, 500);
         // Re-index data-entry-idx attributes in remaining DOM elements
         document.querySelectorAll('.log-entry').forEach((el, i) => el.dataset.entryIdx = i);
+        let total = 0;
+        for (const e of entries) total += e.lines.length;
+        globalLineIdx = total;
       }
 
       // Check if this line starts a new logical entry
@@ -711,17 +708,17 @@ async function runCmd() {
         // Finalize current entry
         if (currentEntry) entries.push(currentEntry);
         // Start new entry
-        currentEntry = { text: line, startIdx: idx, endIdx: idx };
-        createEntryDOM(currentEntry, idx);
+        currentEntry = { text: line, lines: [line] };
+        createEntryDOM(currentEntry, lineIdx);
       } else if (currentEntry) {
         // Continuation of current entry
-        currentEntry.text += '\n' + line;
-        currentEntry.endIdx = idx;
-        appendToEntryDOM(currentEntry, line, idx);
+        currentEntry.text += "\n" + line;
+        currentEntry.lines.push(line);
+        appendToEntryDOM(currentEntry, line, lineIdx);
       } else {
         // No entries yet — first line becomes its own entry
-        currentEntry = { text: line, startIdx: idx, endIdx: idx };
-        createEntryDOM(currentEntry, idx);
+        currentEntry = { text: line, lines: [line] };
+        createEntryDOM(currentEntry, lineIdx);
       }
 
       if (filterInput.value) applyFilter();
