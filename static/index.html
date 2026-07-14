@@ -884,7 +884,6 @@ function appendLogLine(line) {
 
 function applyFilter() {
   const filter = filterInput.value.toLowerCase();
-  const ctxLines = 3; // context lines before/after each match
   const elements = logArea.querySelectorAll('.log-line');
   let matchCount = 0;
 
@@ -899,13 +898,49 @@ function applyFilter() {
     return;
   }
 
-  // Build set of line indices to show (matches + context window)
+  // For each match, expand context to include the entire pretty-printed
+  // JSON block it belongs to (detected by brace/bracket balance).
   const show = new Set();
+
+  function findJsonBlock(idx) {
+    // Scan backwards to find the opening brace that contains this line
+    let start = idx;
+    let balance = 0;
+    for (let i = idx; i >= 0; i--) {
+      const text = logLines[i];
+      for (const ch of text) {
+        if (ch === '{' || ch === '[') balance++;
+        else if (ch === '}' || ch === ']') balance--;
+      }
+      if (balance > 0) { start = i; break; }
+    }
+    if (balance <= 0) return null; // no JSON block found
+
+    // Scan forwards to find the matching closing brace
+    let end = idx;
+    balance = 0;
+    for (let i = idx; i < logLines.length; i++) {
+      const text = logLines[i];
+      for (const ch of text) {
+        if (ch === '{' || ch === '[') balance++;
+        else if (ch === '}' || ch === ']') balance--;
+      }
+      if (balance <= 0) { end = i; break; }
+    }
+    return { start, end };
+  }
+
   for (let i = 0; i < logLines.length; i++) {
     if (logLines[i].toLowerCase().includes(filter)) {
       matchCount++;
-      for (let j = Math.max(0, i - ctxLines); j <= Math.min(logLines.length - 1, i + ctxLines); j++) {
-        show.add(j);
+
+      // Try to show the full JSON block around this match
+      const block = findJsonBlock(i);
+      if (block) {
+        for (let j = block.start; j <= block.end; j++) show.add(j);
+      } else {
+        // Fall back to fixed context window (10 lines)
+        for (let j = Math.max(0, i - 10); j <= Math.min(logLines.length - 1, i + 10); j++) show.add(j);
       }
     }
   }
