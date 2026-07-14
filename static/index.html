@@ -203,9 +203,6 @@ body {
   display: block;
 }
 
-.log-line:nth-child(even) {
-  background: rgba(255,255,255,0.015);
-}
 
 .log-line.highlight {
   background: var(--highlight);
@@ -708,7 +705,7 @@ async function runCmd() {
 
       // Check if this line starts a new logical entry
       const stripped = stripAnsi(line).trim();
-      const isBoundary = /\b<<< res\b|\b>>> req\b/.test(stripped);
+      const isBoundary = /^\s*\(NOBRIDGE\)/.test(stripped) || /\b<<< res\b|\b>>> req\b/.test(stripped);
 
       if (isBoundary) {
         // Finalize current entry
@@ -902,6 +899,9 @@ function color256(n) {
 }
 
 // --- Entry display ---
+// Alternating row stripe color (same as old .log-line:nth-child(even))
+const STRIPE_COLOR = 'rgba(255,255,255,0.015)';
+
 function createEntryDOM(entry, idx) {
   // Clear empty state on first entry
   if (idx === 0) logArea.innerHTML = '';
@@ -911,9 +911,10 @@ function createEntryDOM(entry, idx) {
   wrapper.dataset.entryIdx = entries.length;
   entry.dom = wrapper;
 
-  // Add the first line
+  // Add the first line with global-line-index striping
   const div = document.createElement('div');
   div.className = 'log-line';
+  if (idx % 2 === 1) div.style.background = STRIPE_COLOR;
   div.innerHTML = ansiToHtml(entry.text);
   wrapper.appendChild(div);
 
@@ -926,6 +927,7 @@ function createEntryDOM(entry, idx) {
 function appendToEntryDOM(entry, line, idx) {
   const div = document.createElement('div');
   div.className = 'log-line';
+  if (idx % 2 === 1) div.style.background = STRIPE_COLOR;
   div.innerHTML = ansiToHtml(line);
   entry.dom.appendChild(div);
 
