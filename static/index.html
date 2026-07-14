@@ -189,6 +189,13 @@ body {
   line-height: 1.5;
 }
 
+.log-entry {
+  display: block;
+}
+.log-entry.match-entry {
+  outline: 1px solid var(--highlight);
+  outline-offset: -1px;
+}
 .log-line {
   padding: 1px 12px;
   white-space: pre;
@@ -462,6 +469,8 @@ let selectedIdx = -1;
 let editingIdx = -1;
 let logLines = [];
 let logCount = 0;
+let entries = [];       // logical entries: { text: "full entry text", dom: null }
+let currentEntry = null; // entry currently being built
 let isRunning = false;
 let eventSource = null;
 let autoScroll = true;
@@ -674,6 +683,8 @@ async function runCmd() {
     setStatus(`Running on ${profiles[selectedIdx].name}...`, 'running');
     logLines = [];
     logCount = 0;
+    entries = [];
+    currentEntry = null;
     logArea.innerHTML = '';
     filterInput.value = '';
     filterCount.textContent = '';
@@ -683,12 +694,40 @@ async function runCmd() {
     if (eventSource) eventSource.close();
     eventSource = new EventSource('/api/stream');
     eventSource.onmessage = (e) => {
-      // Append line
       const line = e.data;
+      const idx = logLines.length;
       logLines.push(line);
       logCount++;
-      if (logLines.length > 10000) logLines.shift();
-      appendLogLine(line);
+
+      // Trim oldest entries when buffer gets large
+      if (logLines.length > 5000) {
+        entries.splice(0, 500);
+        // Re-index data-entry-idx attributes in remaining DOM elements
+        document.querySelectorAll('.log-entry').forEach((el, i) => el.dataset.entryIdx = i);
+      }
+
+      // Check if this line starts a new logical entry
+      const stripped = stripAnsi(line).trim();
+      const isBoundary = /\b<<< res\b|\b>>> req\b/.test(stripped);
+
+      if (isBoundary) {
+        // Finalize current entry
+        if (currentEntry) entries.push(currentEntry);
+        // Start new entry
+        currentEntry = { text: line, startIdx: idx, endIdx: idx };
+        createEntryDOM(currentEntry, idx);
+      } else if (currentEntry) {
+        // Continuation of current entry
+        currentEntry.text += '\n' + line;
+        currentEntry.endIdx = idx;
+        appendToEntryDOM(currentEntry, line, idx);
+      } else {
+        // No entries yet — first line becomes its own entry
+        currentEntry = { text: line, startIdx: idx, endIdx: idx };
+        createEntryDOM(currentEntry, idx);
+      }
+
+      if (filterInput.value) applyFilter();
     };
     eventSource.onerror = () => {
       // Connection closed (either by server or error)
@@ -723,6 +762,11 @@ function onCmdEnded(msg) {
 }
 
 // --- ANSI color parsing ---
+
+// Strip ANSI escape codes from text (used for filtering and JSON detection)
+function stripAnsi(text) {
+  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+}
 
 // ANSI color codes mapped to dark-theme CSS colors
 const ANSI_COLORS = {
@@ -857,170 +901,81 @@ function color256(n) {
   return `rgb(${gray},${gray},${gray})`;
 }
 
-// --- Log display ---
-function appendLogLine(line) {
-  // Clear empty state if first line
-  if (logLines.length === 1) {
-    logArea.innerHTML = '';
-  }
+// --- Entry display ---
+function createEntryDOM(entry, idx) {
+  // Clear empty state on first entry
+  if (idx === 0) logArea.innerHTML = '';
 
+  const wrapper = document.createElement('div');
+  wrapper.className = 'log-entry';
+  wrapper.dataset.entryIdx = entries.length;
+  entry.dom = wrapper;
+
+  // Add the first line
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = ansiToHtml(entry.text);
+  wrapper.appendChild(div);
+
+  logArea.appendChild(wrapper);
+
+  if (autoScroll) logArea.scrollTop = logArea.scrollHeight;
+  updateCount();
+}
+
+function appendToEntryDOM(entry, line, idx) {
   const div = document.createElement('div');
   div.className = 'log-line';
   div.innerHTML = ansiToHtml(line);
-  logArea.appendChild(div);
+  entry.dom.appendChild(div);
 
-  // If a filter is active, re-apply it to show context around matches
-  if (filterInput.value) {
-    applyFilter();
-  }
-
-  // Auto-scroll (only if we were already at bottom)
-  if (autoScroll) {
-    logArea.scrollTop = logArea.scrollHeight;
-  }
-
+  if (autoScroll) logArea.scrollTop = logArea.scrollHeight;
   updateCount();
 }
 
 function applyFilter() {
   const filter = filterInput.value.toLowerCase();
-  const elements = logArea.querySelectorAll('.log-line');
-  let matchCount = 0;
 
   if (!filter) {
-    // Show all lines, remove highlights
-    elements.forEach(el => {
+    // Show all entries
+    document.querySelectorAll('.log-entry').forEach(el => {
       el.style.display = '';
-      el.classList.remove('highlight');
+      el.querySelectorAll('.log-line').forEach(ln => ln.classList.remove('highlight'));
     });
     filterCount.textContent = '';
     updateCount();
     return;
   }
 
-  // For each match, expand context to include the entire pretty-printed
-  // JSON block it belongs to (detected by brace/bracket balance).
-  const show = new Set();
-
-  // Strip ANSI escape codes before counting braces/brackets.
-  // Raw log lines contain codes like [36m / [0m whose [ would be
-  // counted as a JSON array bracket, breaking balance tracking.
-  function stripAnsi(text) {
-    return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-  }
-
-  function findBlockForMatch(idx) {
-    // Determine the range of lines to scan (up to 60 lines around the match)
-    const maxLook = 60;
-    const from = Math.max(0, idx - maxLook);
-    const to   = Math.min(logLines.length - 1, idx + maxLook);
-
-    // --- Helper: find JSON block boundaries starting at a given line ---
-    function expandJson(startLine) {
-      let balance = 0;
-      let end = startLine;
-      for (let i = startLine; i <= to; i++) {
-        const text = stripAnsi(logLines[i]);
-        for (const ch of text) {
-          if (ch === '{' || ch === '[') balance++;
-          else if (ch === '}' || ch === ']') balance--;
-        }
-        if (balance <= 0) { end = i; break; }
-      }
-      return end;
-    }
-
-    // --- CASE 1: match is INSIDE a JSON block (scan backward) ---
-    let insideStart = -1;
-    let balance = 0;
-    for (let i = idx; i >= from; i--) {
-      const text = stripAnsi(logLines[i]);
-      for (const ch of text) {
-        if (ch === '{' || ch === '[') balance++;
-        else if (ch === '}' || ch === ']') balance--;
-      }
-      if (balance > 0) { insideStart = i; break; }
-    }
-
-    let blockStart = idx;
-    let blockEnd   = idx;
-
-    if (insideStart >= 0) {
-      // Found enclosing JSON — expand to its full extent
-      blockStart = insideStart;
-      blockEnd   = expandJson(insideStart);
-
-      // Include the prefix line before the opening brace
-      if (blockStart > 0) {
-        const prev = stripAnsi(logLines[blockStart - 1]).trim();
-        if (prev.length > 0 && !prev.startsWith('{') && !prev.startsWith('[')) {
-          blockStart--;
-        }
-      }
-      return { start: blockStart, end: blockEnd };
-    }
-
-    // --- CASE 2: match is BEFORE a JSON block (look forward) ---
-    // Scan the match line and the next few lines for the start of a JSON block
-    for (let i = idx; i <= Math.min(idx + 5, to); i++) {
-      const line = stripAnsi(logLines[i]);
-      if (line.includes('{') || line.includes('[')) {
-        // Found a potential JSON start — verify it actually opens a block
-        let testBal = 0;
-        for (const ch of line) {
-          if (ch === '{' || ch === '[') testBal++;
-          else if (ch === '}' || ch === ']') testBal--;
-        }
-        if (testBal > 0) {
-          // This line opens a JSON block — expand to its full extent
-          blockStart = Math.min(blockStart, i);
-          blockEnd   = expandJson(i);
-
-          // Include the prefix line before the opening brace
-          if (i > 0) {
-            const prev = stripAnsi(logLines[i - 1]).trim();
-            if (prev.length > 0 && !prev.startsWith('{') && !prev.startsWith('[')) {
-              blockStart = Math.min(blockStart, i - 1);
-            }
-          }
-          return { start: blockStart, end: blockEnd };
-        }
-        break; // First line with braces determines behavior
-      }
-    }
-
-    // Neither case matched — no JSON block found
-    return null;
-  }
-
-  for (let i = 0; i < logLines.length; i++) {
-    if (logLines[i].toLowerCase().includes(filter)) {
-      matchCount++;
-
-      // Try to show the full JSON block around this match
-      const block = findBlockForMatch(i);
-      if (block) {
-        for (let j = block.start; j <= block.end; j++) show.add(j);
-      } else {
-        // Fall back to fixed context window (10 lines)
-        for (let j = Math.max(0, i - 10); j <= Math.min(logLines.length - 1, i + 10); j++) show.add(j);
-      }
+  // Build a Set of entry indices whose full text matches the filter
+  const matching = new Set();
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].text.toLowerCase().includes(filter)) {
+      matching.add(i);
     }
   }
 
-  // Apply visibility and highlighting
-  for (let i = 0; i < elements.length; i++) {
-    if (show.has(i)) {
-      elements[i].style.display = '';
-      elements[i].classList.toggle('highlight', logLines[i].toLowerCase().includes(filter));
+  // Show/hide entire entries as one unit
+  document.querySelectorAll('.log-entry').forEach(el => {
+    const ei = parseInt(el.dataset.entryIdx);
+    if (matching.has(ei)) {
+      el.style.display = '';
+      // Highlight matching lines within the entry
+      const lines = el.querySelectorAll('.log-line');
+      const entryText = entries[ei] ? entries[ei].text : '';
+      lines.forEach(ln => {
+        ln.classList.remove('highlight');
+      });
+      // Highlight the entry wrapper itself
+      el.classList.add('match-entry');
     } else {
-      elements[i].style.display = 'none';
-      elements[i].classList.remove('highlight');
+      el.style.display = 'none';
+      el.classList.remove('match-entry');
     }
-  }
+  });
 
-  const shownCount = show.size;
-  filterCount.textContent = filter ? `${shownCount} lines (${matchCount} matches)` : '';
+  const matchCount = matching.size;
+  filterCount.textContent = filter ? `${matchCount} entries` : '';
   updateCount();
   if (filter) logArea.scrollTop = 0;
 }
