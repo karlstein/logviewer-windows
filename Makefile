@@ -89,11 +89,128 @@ run: build
 	./$(BINARY)
 
 run-server: build-server
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
 	@echo "Starting Log Viewer in server-only mode..."
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
 	./$(BINARY)
 
 # ------------------------------------------------------------------
-# test — Run all package tests
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
 # ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
+
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
+# ------------------------------------------------------------------
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
+# test — Run all package tests
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
+# ------------------------------------------------------------------
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
 test:
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
 	@go test ./...
+
+# ------------------------------------------------------------------
+# debug     — Build server-only + dev mode, opens in browser
+#             Use Chrome/Edge F12 DevTools for debugging
+# ------------------------------------------------------------------
+debug:
+	@echo "Building for debug (server-only + dev mode)..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo ""
+	@echo "  Log Viewer running in BROWSER mode —"
+	@echo "  Press F12 → Console tab to see console.log() output"
+	@echo ""
+	./$(BINARY)
