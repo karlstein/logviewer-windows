@@ -904,7 +904,7 @@ function applyFilter() {
 
   function findJsonBlock(idx) {
     // Scan backwards to find the opening brace that contains this line
-    let start = idx;
+    let openIdx = idx;
     let balance = 0;
     for (let i = idx; i >= 0; i--) {
       const text = logLines[i];
@@ -912,22 +912,33 @@ function applyFilter() {
         if (ch === '{' || ch === '[') balance++;
         else if (ch === '}' || ch === ']') balance--;
       }
-      if (balance > 0) { start = i; break; }
+      if (balance > 0) { openIdx = i; break; }
     }
     if (balance <= 0) return null; // no JSON block found
 
-    // Scan forwards to find the matching closing brace
-    let end = idx;
+    // Scan forwards from the opening brace to find the matching close
+    let closeIdx = openIdx;
     balance = 0;
-    for (let i = idx; i < logLines.length; i++) {
+    for (let i = openIdx; i < logLines.length; i++) {
       const text = logLines[i];
       for (const ch of text) {
         if (ch === '{' || ch === '[') balance++;
         else if (ch === '}' || ch === ']') balance--;
       }
-      if (balance <= 0) { end = i; break; }
+      if (balance <= 0) { closeIdx = i; break; }
     }
-    return { start, end };
+
+    // Include the "prefix" line before the opening brace
+    // (e.g. "LOG ... | INFO : <<< res") as part of the same entry
+    let blockStart = openIdx;
+    if (openIdx > 0) {
+      const prev = logLines[openIdx - 1].trim();
+      if (prev.length > 0 && !prev.startsWith('{') && !prev.startsWith('[')) {
+        blockStart = openIdx - 1;
+      }
+    }
+
+    return { start: blockStart, end: closeIdx };
   }
 
   for (let i = 0; i < logLines.length; i++) {
