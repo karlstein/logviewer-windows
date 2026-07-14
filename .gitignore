@@ -1,0 +1,17 @@
+# Binaries
+logviewer
+logviewer.exe
+logviewer_server
+
+# Temp files
+/tmp/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Go
+vendor/

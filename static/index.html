@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1e1e1e;
+  --surface: #252526;
+  --surface-alt: #2d2d2d;
+  --surface-hover: #333;
+  --border: #3c3c3c;
+  --text: #cccccc;
+  --text-dim: #808080;
+  --text-bright: #e0e0e0;
+  --primary: #007acc;
+  --primary-hover: #0098ff;
+  --success: #6a9955;
+  --error: #f44747;
+  --warning: #cca700;
+  --running: #4ec906;
+  --log-bg: #1a1a1a;
+  --highlight: #264f78;
+  --scrollbar: #424242;
+  --btn-green: #006400;
+  --btn-red: #8b0000;
+  --btn-blue: #0e639c;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Toolbar */
+.toolbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  min-width: 36px;
+}
+
+/* Profile tabs */
+.profile-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  overflow-x: auto;
+  padding: 2px 0;
+}
+
+.profile-tab {
+  padding: 4px 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.profile-tab:hover { background: var(--surface-hover); }
+.profile-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+
+.btn-add { background: var(--btn-blue); color: #fff; }
+.btn-add:hover:not(:disabled) { background: var(--primary-hover); }
+
+.btn-run { background: var(--btn-green); color: #fff; }
+.btn-run:hover:not(:disabled) { background: #008000; }
+
+.btn-stop { background: var(--btn-red); color: #fff; }
+.btn-stop:hover:not(:disabled) { background: #b00000; }
+
+.btn-muted { background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); }
+.btn-muted:hover:not(:disabled) { background: var(--surface-hover); }
+
+.btn-danger { background: var(--btn-red); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #b00000; }
+
+/* Command input */
+.cmd-input {
+  flex: 1;
+  background: var(--border);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  outline: none;
+}
+
+.cmd-input::placeholder { color: var(--text-dim); }
+.cmd-input:focus { outline: 1px solid var(--primary); }
+
+/* Filter bar */
+.filter-bar {
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.filter-input {
+  flex: 1;
+  background: var(--border);
+  border: none;
+  border-radius: 4px;
+  padding: 5px 10px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.filter-input::placeholder { color: var(--text-dim); }
+.filter-input:focus { outline: 1px solid var(--primary); }
+
+.filter-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Log area */
+.log-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: var(--log-bg);
+  padding: 0;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.log-line {
+  padding: 1px 12px;
+  white-space: pre;
+  min-height: 18px;
+  display: flex;
+}
+
+.log-line:nth-child(even) {
+  background: rgba(255,255,255,0.015);
+}
+
+.log-line.highlight {
+  background: var(--highlight);
+}
+
+.log-line .match {
+  background: var(--highlight);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.log-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* Status bar */
+.status-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 2px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.status-dot.running { background: var(--running); animation: pulse 1.5s infinite; }
+.status-dot.error { background: var(--error); }
+.status-dot.success { background: var(--success); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-msg { color: var(--text); }
+.status-msg.dim { color: var(--text-dim); }
+.status-msg.error { color: var(--error); }
+.status-msg.success { color: var(--success); }
+.status-msg.running { color: var(--running); }
+.status-count { color: var(--text-dim); }
+
+/* Modal overlay */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 360px;
+  max-width: 440px;
+  width: 90%;
+}
+
+.modal h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 16px;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+
+.form-group input {
+  width: 100%;
+  background: var(--border);
+  border: none;
+  border-radius: 4px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.form-group input:focus { outline: 1px solid var(--primary); }
+
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  gap: 8px;
+}
+
+.form-actions-right {
+  display: flex;
+  gap: 8px;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  color: var(--text-dim);
+}
+.empty-state-icon { font-size: 32px; opacity: 0.3; }
+.empty-state-text { font-size: 13px; }
+
+/* Notification toast */
+.toast {
+  display: none;
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 13px;
+  z-index: 999;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  animation: fadeIn 0.2s;
+}
+
+.toast.show { display: block; }
+.toast.error { border-color: var(--error); color: var(--error); }
+.toast.success { border-color: var(--success); color: var(--success); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+</style>
+</head>
+<body>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- Modal -->
+<div id="profileModal" class="modal-overlay">
+  <div class="modal">
+    <h2 id="modalTitle">Add Profile</h2>
+    <div class="form-group">
+      <label>Name</label>
+      <input id="fName" type="text" placeholder="My Server" />
+    </div>
+    <div class="form-group">
+      <label>Host</label>
+      <input id="fHost" type="text" placeholder="192.168.1.100 or server.example.com" />
+    </div>
+    <div class="form-group">
+      <label>Port</label>
+      <input id="fPort" type="text" placeholder="22" />
+    </div>
+    <div class="form-group">
+      <label>User</label>
+      <input id="fUser" type="text" placeholder="root" />
+    </div>
+    <div class="form-group">
+      <label>Password <span style="color:var(--text-dim);font-size:11px;">(leave blank if using SSH key)</span></label>
+      <input id="fPassword" type="password" placeholder="••••••••" />
+    </div>
+    <div class="form-group">
+      <label>SSH Key Path <span style="color:var(--text-dim);font-size:11px;">(leave blank if using password)</span></label>
+      <input id="fKey" type="text" placeholder="/home/user/.ssh/id_rsa" />
+    </div>
+    <div class="form-actions">
+      <div>
+        <button id="deleteBtn" class="btn btn-danger btn-sm" style="display:none">Delete</button>
+      </div>
+      <div class="form-actions-right">
+        <button id="cancelBtn" class="btn btn-muted">Cancel</button>
+        <button id="saveBtn" class="btn btn-add">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-row">
+    <span class="toolbar-label">Profiles</span>
+    <div class="profile-tabs" id="profileTabs"></div>
+    <button id="addBtn" class="btn btn-add btn-sm">+ Add</button>
+  </div>
+  <div class="toolbar-row">
+    <span class="toolbar-label">Cmd</span>
+    <input id="cmdInput" class="cmd-input" type="text" placeholder="Enter command (e.g., tail -f /var/log/syslog)" spellcheck="false"
+           onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); runCmd(); }" />
+    <button id="runBtn" class="btn btn-run" onclick="runCmd()">▶ Run</button>
+    <button id="stopBtn" class="btn btn-stop" onclick="stopCmd()" disabled>■ Stop</button>
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <span style="font-size:13px;">🔍</span>
+  <input id="filterInput" class="filter-input" type="text" placeholder="Filter logs... (case-insensitive)" spellcheck="false"
+         oninput="applyFilter()" />
+  <span id="filterCount" class="filter-count"></span>
+</div>
+
+<!-- Log area -->
+<div id="logArea" class="log-area">
+  <div class="empty-state">
+    <div class="empty-state-icon">📋</div>
+    <div class="empty-state-text">Select a profile, enter a command, and press ▶ Run</div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <div class="status-indicator">
+    <span id="statusDot" class="status-dot"></span>
+    <span id="statusMsg" class="status-msg dim">Ready</span>
+  </div>
+  <span id="statusCount" class="status-count"></span>
+</div>
+
+<script>
+// State
+let profiles = [];
+let selectedIdx = -1;
+let editingIdx = -1;
+let logLines = [];
+let logCount = 0;
+let isRunning = false;
+let eventSource = null;
+let autoScroll = true;
+
+const logArea = document.getElementById('logArea');
+const profileTabs = document.getElementById('profileTabs');
+const cmdInput = document.getElementById('cmdInput');
+const filterInput = document.getElementById('filterInput');
+const filterCount = document.getElementById('filterCount');
+const runBtn = document.getElementById('runBtn');
+const stopBtn = document.getElementById('stopBtn');
+const addBtn = document.getElementById('addBtn');
+const statusMsg = document.getElementById('statusMsg');
+const statusDot = document.getElementById('statusDot');
+const statusCount = document.getElementById('statusCount');
+const toast = document.getElementById('toast');
+
+// Modal elements
+const profileModal = document.getElementById('profileModal');
+const modalTitle = document.getElementById('modalTitle');
+const fName = document.getElementById('fName');
+const fHost = document.getElementById('fHost');
+const fPort = document.getElementById('fPort');
+const fUser = document.getElementById('fUser');
+const fPassword = document.getElementById('fPassword');
+const fKey = document.getElementById('fKey');
+const saveBtn = document.getElementById('saveBtn');
+const cancelBtn = document.getElementById('cancelBtn');
+const deleteBtn = document.getElementById('deleteBtn');
+
+// --- API ---
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Accept': 'application/json' } };
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => 'unknown error');
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+  return res.json().catch(() => null);
+}
+
+// --- Toast ---
+let toastTimeout = null;
+function showToast(msg, type, dur) {
+  toast.textContent = msg;
+  toast.className = 'toast show ' + (type || '');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.classList.remove('show'), dur || 3000);
+}
+
+// --- Status ---
+function setStatus(msg, type) {
+  statusMsg.textContent = msg;
+  statusMsg.className = 'status-msg ' + (type || 'dim');
+  statusDot.className = 'status-dot ' + (type || '');
+}
+
+function updateCount() {
+  const filter = filterInput.value.toLowerCase();
+  if (logCount === 0) { statusCount.textContent = ''; return; }
+  if (filter) {
+    let match = 0;
+    for (const line of logLines) { if (line.toLowerCase().includes(filter)) match++; }
+    statusCount.textContent = `${match} / ${logCount} lines`;
+  } else {
+    statusCount.textContent = `${logCount} lines`;
+  }
+}
+
+// --- Profile tabs ---
+function renderProfiles() {
+  let html = '';
+  if (profiles.length === 0) {
+    html = '<div style="font-size:12px;color:var(--text-dim);padding:4px 0;">No profiles — click +Add to create one</div>';
+  } else {
+    for (let i = 0; i < profiles.length; i++) {
+      html += `<button class="profile-tab${i === selectedIdx ? ' active' : ''}" data-idx="${i}">${escapeHtml(profiles[i].name)}</button>`;
+    }
+  }
+  profileTabs.innerHTML = html;
+
+  // Click handlers
+  profileTabs.querySelectorAll('.profile-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const idx = parseInt(tab.dataset.idx);
+      if (selectedIdx === idx) { selectedIdx = -1; }
+      else { selectedIdx = idx; }
+      renderProfiles();
+    });
+    tab.addEventListener('dblclick', () => {
+      const idx = parseInt(tab.dataset.idx);
+      openEditProfile(idx);
+    });
+  });
+}
+
+// --- Modal ---
+function openAddProfile() {
+  editingIdx = -1;
+  modalTitle.textContent = 'Add Profile';
+  fName.value = '';
+  fHost.value = '';
+  fPort.value = '22';
+  fUser.value = '';
+  fPassword.value = '';
+  fKey.value = '';
+  deleteBtn.style.display = 'none';
+  profileModal.classList.add('open');
+  setTimeout(() => fName.focus(), 100);
+}
+
+function openEditProfile(idx) {
+  editingIdx = idx;
+  const p = profiles[idx];
+  modalTitle.textContent = 'Edit Profile';
+  fName.value = p.name || '';
+  fHost.value = p.host || '';
+  fPort.value = p.port || '22';
+  fUser.value = p.user || '';
+  fPassword.value = p.password || '';
+  fKey.value = p.key_path || '';
+  deleteBtn.style.display = '';
+  profileModal.classList.add('open');
+  setTimeout(() => fName.focus(), 100);
+}
+
+function closeModal() {
+  profileModal.classList.remove('open');
+}
+
+cancelBtn.addEventListener('click', closeModal);
+
+saveBtn.addEventListener('click', async () => {
+  const p = {
+    name: fName.value.trim(),
+    host: fHost.value.trim(),
+    port: fPort.value.trim() || '22',
+    user: fUser.value.trim(),
+    password: fPassword.value,
+    key_path: fKey.value.trim()
+  };
+
+  if (!p.name) { showToast('Name is required', 'error'); return; }
+  if (!p.host) { showToast('Host is required', 'error'); return; }
+  if (!p.port) { showToast('Port is required', 'error'); return; }
+  if (!p.user) { showToast('User is required', 'error'); return; }
+  if (!p.password && !p.key_path) { showToast('Password or SSH key path is required', 'error'); return; }
+
+  try {
+    if (editingIdx >= 0) {
+      await api('PUT', `/api/profiles/${editingIdx}`, p);
+    } else {
+      await api('POST', '/api/profiles', p);
+    }
+    await loadProfiles();
+    closeModal();
+    showToast('Profile saved', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+deleteBtn.addEventListener('click', async () => {
+  if (editingIdx < 0) return;
+  if (!confirm(`Delete profile "${profiles[editingIdx].name}"?`)) return;
+  try {
+    await api('DELETE', `/api/profiles/${editingIdx}`);
+    if (selectedIdx === editingIdx) selectedIdx = -1;
+    else if (selectedIdx > editingIdx) selectedIdx--;
+    await loadProfiles();
+    closeModal();
+    showToast('Profile deleted');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+// Close modal on overlay click
+profileModal.addEventListener('click', (e) => {
+  if (e.target === profileModal) closeModal();
+});
+
+// --- Load profiles ---
+async function loadProfiles() {
+  try {
+    const data = await api('GET', '/api/profiles');
+    profiles = data || [];
+    // Adjust selected index
+    if (selectedIdx >= profiles.length) selectedIdx = -1;
+    renderProfiles();
+  } catch (err) {
+    console.error('Failed to load profiles:', err);
+  }
+}
+
+// --- Run / Stop ---
+async function runCmd() {
+  const cmd = cmdInput.value.trim();
+  if (!cmd) { showToast('Enter a command first', 'error'); return; }
+  if (selectedIdx < 0 || selectedIdx >= profiles.length) { showToast('Select a profile first', 'error'); return; }
+  if (isRunning) return;
+
+  try {
+    await api('POST', '/api/run', { profile_index: selectedIdx, command: cmd });
+    isRunning = true;
+    runBtn.disabled = true;
+    stopBtn.disabled = false;
+    addBtn.disabled = true;
+    setStatus(`Running on ${profiles[selectedIdx].name}...`, 'running');
+    logLines = [];
+    logCount = 0;
+    logArea.innerHTML = '';
+    filterInput.value = '';
+    filterCount.textContent = '';
+    updateCount();
+
+    // Connect SSE
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource('/api/stream');
+    eventSource.onmessage = (e) => {
+      // Append line
+      const line = e.data;
+      logLines.push(line);
+      logCount++;
+      if (logLines.length > 10000) logLines.shift();
+      appendLogLine(line);
+    };
+    eventSource.onerror = () => {
+      // Connection closed (either by server or error)
+      if (eventSource.readyState === EventSource.CLOSED && isRunning) {
+        onCmdEnded('Command completed');
+      }
+    };
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function stopCmd() {
+  try {
+    await api('POST', '/api/stop');
+  } catch (err) {
+    console.error('Stop error:', err);
+  }
+}
+
+function onCmdEnded(msg) {
+  isRunning = false;
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  addBtn.disabled = false;
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  setStatus(msg || 'Command completed', 'success');
+  updateCount();
+  setTimeout(() => {
+    if (!isRunning) setStatus('Ready', 'dim');
+  }, 5000);
+}
+
+// --- Log display ---
+function appendLogLine(line) {
+  // Clear empty state if first line
+  if (logLines.length === 1) {
+    logArea.innerHTML = '';
+  }
+
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.textContent = line;
+
+  // Check filter
+  const filter = filterInput.value;
+  if (filter) {
+    const lower = line.toLowerCase();
+    const fl = filter.toLowerCase();
+    if (lower.includes(fl)) {
+      div.classList.add('highlight');
+    } else {
+      div.style.display = 'none';
+    }
+  }
+
+  logArea.appendChild(div);
+
+  // Auto-scroll (only if we were already at bottom)
+  if (autoScroll) {
+    logArea.scrollTop = logArea.scrollHeight;
+  }
+
+  updateCount();
+}
+
+function applyFilter() {
+  const filter = filterInput.value.toLowerCase();
+  const lines = logArea.querySelectorAll('.log-line');
+  let matchCount = 0;
+
+  lines.forEach((line, i) => {
+    if (!filter) {
+      line.style.display = '';
+      line.classList.remove('highlight');
+      matchCount++;
+    } else {
+      const text = logLines[i] || '';
+      if (text.toLowerCase().includes(filter)) {
+        line.style.display = '';
+        line.classList.add('highlight');
+        matchCount++;
+      } else {
+        line.style.display = 'none';
+        line.classList.remove('highlight');
+      }
+    }
+  });
+
+  filterCount.textContent = filter ? `${matchCount} / ${logLines.length} lines` : '';
+  updateCount();
+
+  // Scroll to top when filtering
+  if (filter) logArea.scrollTop = 0;
+}
+
+// Track auto-scroll: user scrolled up → stop auto-scroll, hit bottom → resume
+logArea.addEventListener('scroll', () => {
+  const threshold = 30;
+  autoScroll = (logArea.scrollHeight - logArea.scrollTop - logArea.clientHeight) < threshold;
+});
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadProfiles();
+  // init SSE for status updates
+  const statusSource = new EventSource('/api/status');
+  statusSource.onmessage = (e) => {
+    const st = JSON.parse(e.data);
+    if (st.running !== undefined) {
+      if (!st.running && isRunning) {
+        onCmdEnded(st.message || 'Command completed');
+      }
+      isRunning = st.running || false;
+      runBtn.disabled = isRunning;
+      stopBtn.disabled = !isRunning;
+      addBtn.disabled = isRunning;
+      if (isRunning) {
+        setStatus(st.message || 'Running...', 'running');
+      }
+    }
+  };
+});
+
+addBtn.addEventListener('click', openAddProfile);
+
+// --- Utils ---
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
