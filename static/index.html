@@ -867,20 +867,12 @@ function appendLogLine(line) {
   const div = document.createElement('div');
   div.className = 'log-line';
   div.innerHTML = ansiToHtml(line);
-
-  // Check filter
-  const filter = filterInput.value;
-  if (filter) {
-    const lower = line.toLowerCase();
-    const fl = filter.toLowerCase();
-    if (lower.includes(fl)) {
-      div.classList.add('highlight');
-    } else {
-      div.style.display = 'none';
-    }
-  }
-
   logArea.appendChild(div);
+
+  // If a filter is active, re-apply it to show context around matches
+  if (filterInput.value) {
+    applyFilter();
+  }
 
   // Auto-scroll (only if we were already at bottom)
   if (autoScroll) {
@@ -892,31 +884,46 @@ function appendLogLine(line) {
 
 function applyFilter() {
   const filter = filterInput.value.toLowerCase();
+  const ctxLines = 3; // context lines before/after each match
   const elements = logArea.querySelectorAll('.log-line');
   let matchCount = 0;
 
-  elements.forEach((el, i) => {
-    if (!filter) {
+  if (!filter) {
+    // Show all lines, remove highlights
+    elements.forEach(el => {
       el.style.display = '';
       el.classList.remove('highlight');
+    });
+    filterCount.textContent = '';
+    updateCount();
+    return;
+  }
+
+  // Build set of line indices to show (matches + context window)
+  const show = new Set();
+  for (let i = 0; i < logLines.length; i++) {
+    if (logLines[i].toLowerCase().includes(filter)) {
       matchCount++;
-    } else {
-      const text = logLines[i] || '';
-      if (text.toLowerCase().includes(filter)) {
-        el.style.display = '';
-        el.classList.add('highlight');
-        matchCount++;
-      } else {
-        el.style.display = 'none';
-        el.classList.remove('highlight');
+      for (let j = Math.max(0, i - ctxLines); j <= Math.min(logLines.length - 1, i + ctxLines); j++) {
+        show.add(j);
       }
     }
-  });
+  }
 
-  filterCount.textContent = filter ? `${matchCount} / ${logLines.length} lines` : '';
+  // Apply visibility and highlighting
+  for (let i = 0; i < elements.length; i++) {
+    if (show.has(i)) {
+      elements[i].style.display = '';
+      elements[i].classList.toggle('highlight', logLines[i].toLowerCase().includes(filter));
+    } else {
+      elements[i].style.display = 'none';
+      elements[i].classList.remove('highlight');
+    }
+  }
+
+  const shownCount = show.size;
+  filterCount.textContent = filter ? `${shownCount} lines (${matchCount} matches)` : '';
   updateCount();
-
-  // Scroll to top when filtering
   if (filter) logArea.scrollTop = 0;
 }
 
