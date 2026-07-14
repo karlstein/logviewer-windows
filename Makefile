@@ -39,7 +39,7 @@ build:
 build-windows:
 ifeq ($(HOST_OS),windows)
 	@echo "Building $(BINARY_WIN) for Windows (native)..."
-	go build -o $(BINARY_WIN) $(SRC)
+	CGO_ENABLED=1 go build -o $(BINARY_WIN) $(SRC)
 	@echo "Done: $(BINARY_WIN)"
 else
 	@echo "Building $(BINARY_WIN) for Windows (cross-compile)..."
