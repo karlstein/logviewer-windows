@@ -471,6 +471,10 @@ let isRunning = false;
 let eventSource = null;
 let autoScroll = true;
 
+// Confirm JS loaded — check browser F12 console to verify
+console.log('[Log Viewer] Script loaded. Ready.');
+console.log('[Log Viewer] Open browser F12 → Console to see debug output.');
+
 const logArea = document.getElementById('logArea');
 const profileTabs = document.getElementById('profileTabs');
 const cmdInput = document.getElementById('cmdInput');
