@@ -339,7 +339,7 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 
 	// Monitor completion in background
 	go func() {
-		client.Stop() // blocks until command finishes
+		client.Wait() // blocks until command finishes naturally
 		s.runMu.Lock()
 		s.running = false
 		s.runMu.Unlock()

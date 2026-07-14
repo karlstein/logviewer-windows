@@ -133,7 +133,7 @@ func (c *Client) readOutput(ctx context.Context, session *ssh.Session, stdout, s
 	lines := make(chan string, 1000)
 	var wg sync.WaitGroup
 
-	readPipe := func(rd io.Reader) {
+	readPipe := func(name string, rd io.Reader) {
 		defer wg.Done()
 		scanner := bufio.NewScanner(rd)
 		scanner.Buffer(make([]byte, 64*1024), 512*1024)
@@ -144,11 +144,17 @@ func (c *Client) readOutput(ctx context.Context, session *ssh.Session, stdout, s
 				return
 			}
 		}
+		if err := scanner.Err(); err != nil {
+			select {
+			case lines <- fmt.Sprintf("[ssh:%s read error: %v]", name, err):
+			case <-ctx.Done():
+			}
+		}
 	}
 
 	wg.Add(2)
-	go readPipe(stdout)
-	go readPipe(stderr)
+	go readPipe("stdout", stdout)
+	go readPipe("stderr", stderr)
 
 	// Close lines channel when both readers finish
 	go func() {
@@ -184,6 +190,17 @@ func (c *Client) Running() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.running
+}
+
+// Wait blocks until the currently running command finishes naturally
+// (without cancelling it). Returns immediately if nothing is running.
+func (c *Client) Wait() {
+	c.mu.Lock()
+	done := c.done
+	c.mu.Unlock()
+	if done != nil {
+		<-done
+	}
 }
 
 // Stop terminates the currently running command. It blocks until the
