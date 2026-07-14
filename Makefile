@@ -59,6 +59,21 @@ build-server:
 build-all: build build-server
 
 # ------------------------------------------------------------------
+# build-dev   — Build for development (serves files from disk, hot-reload
+#               on HTML/JS/CSS changes — just refresh browser)
+# run-dev     — Build dev mode then start
+# ------------------------------------------------------------------
+build-dev:
+	@echo "Building $(BINARY) in dev mode..."
+	go build -tags "serveronly dev" -o $(BINARY) $(SRC)
+	@echo "Done: $(BINARY) (dev mode)"
+	@echo "Static files served from ./static/ — edit and refresh browser"
+
+run-dev: build-dev
+	@echo "Starting Log Viewer in dev mode..."
+	./$(BINARY)
+
+# ------------------------------------------------------------------
 # clean — Remove all built binaries
 # ------------------------------------------------------------------
 clean:

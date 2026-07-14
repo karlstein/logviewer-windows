@@ -21,6 +21,16 @@ import (
 //go:embed static
 var staticFS embed.FS
 
+// staticHandler is how static files are served. Default is embedded.
+// The `go build -tags dev` variant overrides this to serve from disk
+// for live-reload during development.
+var staticHandler http.Handler
+
+func init() {
+	staticSub, _ := fs.Sub(staticFS, "static")
+	staticHandler = http.FileServer(http.FS(staticSub))
+}
+
 // Hub manages SSE clients for log streaming.
 type Hub struct {
 	mu      sync.RWMutex
@@ -134,10 +144,9 @@ func runServer() (int, *http.Server, *Server) {
 	mux.HandleFunc("/api/stop", srv.handleStop)
 	mux.HandleFunc("/api/stream", srv.handleStream)
 	mux.HandleFunc("/api/status", srv.handleStatus)
+		// Serve the SPA (from embed in production, or disk in dev mode)
+		mux.Handle("/", staticHandler)
 
-	// Serve the embedded SPA
-	staticSub, _ := fs.Sub(staticFS, "static")
-	mux.Handle("/", http.FileServer(http.FS(staticSub)))
 
 	// Listen on a random available port (127.0.0.1 only for security)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
